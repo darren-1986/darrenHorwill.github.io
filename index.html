@@ -216,6 +216,44 @@
       border-radius: 12px; font-weight: bold; font-size: 0.8em; cursor: pointer;
       box-shadow: 0 4px 12px rgba(0,0,0,0.5); display: none; z-index: 100;
     }
+
+    /* =========================================================
+       MOBILE RESPONSIVENESS
+       ========================================================= */
+    @media (max-width: 640px) {
+        body { padding: 5px; }
+        
+        /* Stack the audio dashboard elements to prevent horizontal overflow */
+        .audio-dashboard {
+            flex-wrap: wrap;
+            gap: 12px;
+            padding: 12px 10px;
+        }
+        .audio-left {
+            flex: 1;
+            min-width: 120px;
+        }
+        .vol-wrapper {
+            flex: 1;
+            justify-content: flex-end;
+        }
+        /* Drop visualizer to a full-width second row on mobile */
+        .squawk-visualizer {
+            order: 3;
+            flex-basis: 100%;
+            height: 25px;
+            margin-top: 4px;
+        }
+        
+        /* Adjust feed column sizes for mobile screens */
+        .time-col { width: 75px; }
+        .time-col .time-main { font-size: 0.8em; }
+        .news-row { padding: 10px; gap: 8px; }
+        .terminal-header { padding: 10px; }
+        .header-title { font-size: 0.75em; }
+        .filter-options { gap: 8px; }
+        .filter-options label { font-size: 0.9em; }
+    }
   </style>
 </head>
 <body>
@@ -358,7 +396,7 @@
     const API_KEY = 'd9fjrs9r01qu5nhepvo0d9fjrs9r01qu5nhepvog'; 
 
     /* =========================================================
-       AUDIO SQUAWK ENGINE LOGIC (RESTORED TIER FILTERS)
+       AUDIO SQUAWK ENGINE LOGIC 
        ========================================================= */
     let audioEnabled = false, seconds = 0, timerInterval;
     let audioCtx = null; 
@@ -618,9 +656,7 @@
       filteredHeadlines.slice(0, visibleCount).forEach((item, index) => {
         const pubDate = new Date(item.datetime * 1000);
         
-        // Explicit Timezone Resolution to lock formatting to local device clock
         const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        
         const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: userTimeZone };
         const dateOptions = { month: 'short', day: 'numeric', timeZone: userTimeZone };
         const tzOptions = { timeZoneName: 'short', timeZone: userTimeZone };
@@ -628,7 +664,6 @@
         const timeStr = pubDate.toLocaleTimeString(undefined, timeOptions);
         const dateStr = pubDate.toLocaleDateString(undefined, dateOptions);
         
-        // Extract localized timezone acronym (e.g. WITA, GMT+8)
         const fullTzString = pubDate.toLocaleTimeString(undefined, tzOptions);
         const tzParts = fullTzString.split(' ');
         const tzStr = tzParts[tzParts.length - 1] || '';
@@ -675,7 +710,6 @@
     async function fetchMarketNews() {
       if (API_KEY === 'YOUR_FINNHUB_KEY') return;
       try {
-        // Fetch all 4 free Finnhub news categories concurrently to maximize data coverage
         const categories = ['general', 'forex', 'crypto', 'merger'];
         const fetchPromises = categories.map(cat => 
             fetch(`https://finnhub.io/api/v1/news?category=${cat}&token=${API_KEY}&_t=${Date.now()}`, { cache: 'no-store' })
@@ -686,7 +720,6 @@
         const results = await Promise.all(fetchPromises);
         const rawItems = results.flat();
         
-        // Deduplicate cross-category items by Finnhub ID
         const fetchedItems = [];
         const seenIds = new Set();
         rawItems.forEach(item => {
@@ -702,13 +735,11 @@
         const currentUnixTime = Math.floor(Date.now() / 1000);
 
         fetchedItems.forEach(item => {
-          // Discard upstream time-travel glitches (rejecting timestamps more than 1 hour in the future)
           if (item.datetime > currentUnixTime + 3600) return;
 
           if (!allHeadlines.some(existing => existing.id === item.id)) {
             
             const passesAudioFilter = shouldTriggerAudio(item.headline, item.category);
-            
             item.isImportant = checkUIImportance(item.headline, passesAudioFilter);
             item.tags = getMatchedCategories(item.headline, item.category);
             
