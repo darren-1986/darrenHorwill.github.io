@@ -1,9 +1,771 @@
-<html>
- 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analyst Wire - Real-Time Terminal & Squawk</title>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      background: #000000;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      padding: 15px;
+      margin: 0;
+    }
+    
+    .terminal-wrapper {
+      max-width: 900px;
+      margin: 0 auto;
+      background: #11141d;
+      border: 1px solid #1e2233;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      position: relative;
+    }
+
+    /* =========================================================
+       AUDIO SQUAWK DASHBOARD
+       ========================================================= */
+    .audio-dashboard {
+        display: flex; align-items: center; background: #0a0c13;
+        border-bottom: 1px solid #1e2233; padding: 12px 16px;
+        justify-content: space-between; width: 100%;
+    }
+    .audio-left { display: flex; align-items: center; gap: 15px; min-width: 160px; flex-shrink: 0; }
+    .squawk-logo { height: 28px; width: auto; object-fit: contain; }
+    .audio-status-col { display: flex; flex-direction: column; }
+    .audio-status-col button {
+        background: none; border: none; color: #8b949e; font-family: 'Inter', sans-serif;
+        font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
+        cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 0; transition: color 0.3s;
+    }
+    .audio-status-col button:hover { color: #fff; }
+    
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #475569; box-shadow: 0 0 5px #475569; transition: all 0.3s; }
+    .status-on .status-dot { background: #10b981; box-shadow: 0 0 12px #10b981; }
+    .status-on { color: #10b981 !important; }
+    
+    #timerText { font-size: 11px; color: #475569; margin-top: 4px; font-family: 'JetBrains Mono', monospace; min-height: 15px; }
+    .status-on ~ #timerText { color: #10b981; }
+
+    /* Audio Visualizer */
+    .squawk-visualizer {
+        display: flex; align-items: center; justify-content: center; gap: 3px;
+        height: 35px; flex-grow: 1; padding: 0 10px; opacity: 0.15; 
+        transition: all 0.4s ease; min-width: 40px; overflow: hidden; 
+    }
+    .squawk-visualizer.active { opacity: 1; }
+    
+    .squawk-visualizer .bar {
+        width: 4px; background: #3b82f6; border-radius: 2px; height: 4px; 
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.6); transition: height 0.1s ease;
+    }
+    .bar:nth-child(1), .bar:nth-child(17) { height: 4px; }
+    .bar:nth-child(2), .bar:nth-child(16) { height: 8px; }
+    .bar:nth-child(3), .bar:nth-child(15) { height: 12px; }
+    .bar:nth-child(4), .bar:nth-child(14) { height: 6px; }
+    .bar:nth-child(5), .bar:nth-child(13) { height: 16px; }
+    .bar:nth-child(6), .bar:nth-child(12) { height: 24px; }
+    .bar:nth-child(7), .bar:nth-child(11) { height: 14px; }
+    .bar:nth-child(8), .bar:nth-child(10) { height: 25px; }
+    .bar:nth-child(9) { height: 35px; background: #fff; box-shadow: 0 0 15px #fff, 0 0 30px #3b82f6; }
+
+    .squawk-visualizer.active .bar { animation: pulseWave 0.6s infinite alternate ease-in-out; }
+    .squawk-visualizer.active .bar:nth-child(even) { animation-duration: 0.4s; animation-direction: alternate-reverse; }
+    .squawk-visualizer.active .bar:nth-child(3n) { animation-duration: 0.7s; }
+    .squawk-visualizer.active .bar:nth-child(9) { animation: centerPulse 0.4s infinite alternate ease-in-out; }
+
+    @keyframes pulseWave { 0% { height: 4px; } 100% { height: 28px; box-shadow: 0 0 15px rgba(59, 130, 246, 1); } }
+    @keyframes centerPulse { 0% { height: 15px; } 100% { height: 40px; box-shadow: 0 0 20px #fff, 0 0 40px #3b82f6; } }
+
+    .vol-wrapper {
+        display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.3);
+        padding: 6px 12px; border-radius: 20px; border: 1px solid #1e2233; flex-shrink: 0;
+    }
+    .vol-icon { font-size: 14px; opacity: 0.7; }
+    .vol-slider { -webkit-appearance: none; width: 70px; height: 4px; background: #2a2f45; border-radius: 2px; outline: none; }
+    .vol-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: #fff; border-radius: 50%; cursor: pointer; }
+    
+    .test-audio-btn {
+        background: rgba(59, 130, 246, 0.1); border: 1px solid #3b82f6; color: #3b82f6;
+        padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; cursor: pointer; margin-left: 5px;
+    }
+    .test-audio-btn:hover { background: #3b82f6; color: #fff; }
+    
+    .audio-settings-btn {
+        background: none; border: none; color: #8b949e; cursor: pointer; padding: 4px; display: flex; transition: color 0.2s;
+    }
+    .audio-settings-btn:hover { color: #fff; }
+    .audio-settings-btn svg { width: 18px; height: 18px; }
+
+    /* =========================================================
+       AUDIO SETTINGS MODAL 
+       ========================================================= */
+    .modal-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8);
+        backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center; z-index: 2000;
+    }
+    .modal-content {
+        background: #0f111a; border: 1px solid #1e2233; border-radius: 8px; width: 90%; max-width: 450px;
+        overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.9); font-family: 'Inter', sans-serif;
+    }
+    .modal-header {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 15px 20px; border-bottom: 1px solid #1e2233; background: #151924;
+    }
+    .modal-header h3 { margin: 0; font-size: 15px; color: #fff; font-weight: 600; }
+    .modal-header button { background: none; border: none; color: #8b949e; font-size: 22px; cursor: pointer; padding: 0; line-height: 1; }
+    .modal-header button:hover { color: #fff; }
+    .modal-body { padding: 20px; }
+    .setting-group { margin-bottom: 15px; }
+    .setting-group label.header-label { display: block; font-size: 11px; color: #8b949e; margin-bottom: 8px; text-transform: uppercase; font-weight: 600; }
+    .setting-group select, .setting-group input[type="text"] {
+        width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #2a2f45;
+        background: #0a0c13; color: #fff; font-family: 'Inter', sans-serif; font-size: 13px; outline: none;
+    }
+    .setting-group select:focus, .setting-group input[type="text"]:focus { border-color: #3b82f6; }
+    .checkbox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .checkbox-grid label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #cbd5e1; cursor: pointer; }
+    .checkbox-grid input[type="checkbox"] { accent-color: #3b82f6; cursor: pointer; width: 14px; height: 14px; }
+    .modal-footer { padding: 15px 20px; background: #151924; border-top: 1px solid #1e2233; text-align: right; }
+    .btn-save { background: #3b82f6; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer; transition: background 0.2s; }
+    .btn-save:hover { background: #2563eb; }
+
+    /* =========================================================
+       TERMINAL HEADER & FEED CONTROLS
+       ========================================================= */
+    .terminal-header {
+      background: #151924; padding: 12px 16px; border-bottom: 1px solid #23283b;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .header-title { font-size: 0.85em; font-weight: 600; color: #94a3b8; letter-spacing: 0.5px; }
+    .header-icons { display: flex; gap: 16px; align-items: center; }
+    .icon-btn { background: none; border: none; padding: 0; cursor: pointer; color: #94a3b8; display: flex; align-items: center; justify-content: center; transition: color 0.2s; }
+    .icon-btn:hover, .icon-btn.active { color: #f8fafc; }
+    .icon-btn svg { width: 16px; height: 16px; fill: currentColor; }
+    
+    .control-panel { display: none; background: #0f111a; padding: 12px 16px; border-bottom: 1px solid #23283b; }
+    .control-panel.open { display: flex; gap: 15px; flex-wrap: wrap; align-items: center; }
+    .search-input { background: #151924; border: 1px solid #2a2f45; color: #e2e8f0; padding: 6px 12px; border-radius: 4px; width: 100%; font-size: 0.85em; }
+    .search-input:focus { outline: none; border-color: #3b82f6; }
+    .filter-options { display: flex; gap: 12px; flex-wrap: wrap; font-size: 0.8em; color: #cbd5e1; }
+    .filter-options label { cursor: pointer; display: flex; align-items: center; gap: 4px; }
+
+    /* --- FEED LAYOUT --- */
+    .feed-container { max-height: 600px; overflow-y: auto; position: relative; scroll-behavior: smooth; }
+    .news-row { display: flex; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.03); cursor: pointer; transition: background 0.15s; }
+    .news-row:hover { background: #1a1e2b; }
+    
+    /* Latest Headline Highlight */
+    .news-row.latest { 
+        background: rgba(59, 130, 246, 0.15); 
+        border-left: 4px solid #3b82f6; 
+    }
+    
+    /* Breaking News Highlight */
+    .news-row.important { 
+        background: #f97316; 
+        color: #000000; 
+        border-left: 4px solid #c2410c; 
+        border-bottom: none; 
+    }
+    .news-row.important:hover { background: #ea580c; }
+    
+    .news-row.important.latest {
+        border-left: 4px solid #ffffff; 
+    }
+
+    /* Left Column: Full Local Date, Time, and TZ */
+    .time-col { width: 85px; flex-shrink: 0; font-weight: 600; color: #94a3b8; padding-top: 1px; display: flex; flex-direction: column; gap: 2px; }
+    .time-col .time-main { font-size: 0.9em; color: #e2e8f0; }
+    .time-col .date-sub { font-size: 0.7em; text-transform: uppercase; }
+    .time-col .tz-label { font-size: 0.7em; color: #64748b; font-weight: 500; }
+    .news-row.important .time-col, .news-row.important .time-col > div { color: #000000; font-weight: 700; }
+
+    .content-col { flex-grow: 1; display: flex; flex-direction: column; gap: 6px; }
+    .headline-text { font-size: 0.9em; line-height: 1.4; font-weight: 500; color: #f1f5f9; }
+    .news-row.important .headline-text { color: #000000; font-weight: 800; }
+
+    .tags-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .tag { font-size: 0.65em; padding: 2px 6px; border-radius: 3px; font-weight: 600; text-transform: uppercase; background: #1e2233; color: #94a3b8; }
+    
+    /* Explicit Breaking Tag */
+    .tag.tag-important { background: #000000; color: #f97316; font-weight: 800; }
+    .news-row.important .tag { background: rgba(0,0,0,0.2); color: #000; font-weight: 700; }
+    .news-row.important .tag.tag-important { background: #ffffff; color: #ea580c; }
+
+    .summary-box { display: none; margin-top: 8px; padding: 10px; background: rgba(0,0,0,0.25); border-radius: 4px; font-size: 0.85em; color: #cbd5e1; line-height: 1.5; }
+    .news-row.important .summary-box { color: #111; background: rgba(255,255,255,0.3); font-weight: 500;}
+    .news-row.expanded .summary-box { display: block; }
+    
+    .source-link { display: inline-block; margin-top: 6px; color: #60a5fa; text-decoration: none; font-weight: 600; }
+    .news-row.important .source-link { color: #000; text-decoration: underline; }
+
+    .load-more-row { padding: 15px; text-align: center; border-top: 1px solid #1e2233; }
+    .btn-action { background: #1e2233; color: #cbd5e1; border: none; padding: 6px 16px; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 0.85em; }
+    .btn-action:hover { background: #2a2f45; }
+
+    .new-alert-btn {
+      position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+      background: #3b82f6; color: white; border: none; padding: 6px 14px;
+      border-radius: 12px; font-weight: bold; font-size: 0.8em; cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5); display: none; z-index: 100;
+    }
+  </style>
+</head>
 <body>
-  <h1>Darren Horwill</h1>
-  <p>Welcome to my website!</p>
-  <img src="https://content.codecademy.com/articles/github-pages-via-web-app/happy-ice-cream.gif" />
+
+  <div class="terminal-wrapper">
+      
+    <!-- AUDIO DASHBOARD -->
+    <div class="audio-dashboard">
+        <div class="audio-left">
+            <img src="media/squawkimage.png" alt="Squawk" class="squawk-logo" onerror="this.style.display='none'">
+            <div class="audio-status-col">
+                <button id="audioToggle" onclick="handleAudioToggle()">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="audioLabel">Disconnected</span>
+                </button>
+                <div id="timerText"></div>
+            </div>
+        </div>
+
+        <div class="squawk-visualizer" id="squawkVisualizer">
+            <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+            <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+            <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+            <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+            <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+            <div class="bar"></div><div class="bar"></div>
+        </div>
+
+        <div class="vol-wrapper">
+            <span class="vol-icon">🔉</span>
+            <input type="range" class="vol-slider" id="volSlider" min="0" max="1" step="0.1" value="1" title="Volume">
+            <button class="test-audio-btn" onclick="runAudioTest()">TEST</button>
+            <button class="audio-settings-btn" onclick="openAudioModal()" title="Audio Settings">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="4" y1="6" x2="20" y2="6"></line><line x1="14" y1="4" x2="14" y2="8"></line>
+                    <line x1="4" y1="12" x2="20" y2="12"></line><line x1="8" y1="10" x2="8" y2="14"></line>
+                    <line x1="4" y1="18" x2="20" y2="18"></line><line x1="16" y1="16" x2="16" y2="20"></line>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- AUDIO SETTINGS MODAL -->
+    <div id="audioSettingsModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Audio Squawk Settings</h3>
+                <button onclick="closeAudioModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <label class="header-label">Filter Mode</label>
+                    <select id="squawkMode" onchange="toggleCustomSettings()">
+                        <option value="default">Intelligent Filter (Tiers 1-3)</option>
+                        <option value="custom">Custom Squawk Filter</option>
+                        <option value="all">Read ALL Headlines (No Exclusions)</option>
+                    </select>
+                </div>
+                
+                <div id="customSettingsBlock" style="display: none; padding-top: 15px; border-top: 1px solid #1e2233; margin-top: 15px;">
+                    <div class="setting-group">
+                        <label class="header-label">Watchlist Markets</label>
+                        <div class="checkbox-grid">
+                            <label><input type="checkbox" value="commodities" class="custom-cat-cb"> Commodities</label>
+                            <label><input type="checkbox" value="forex" class="custom-cat-cb"> Forex</label>
+                            <label><input type="checkbox" value="equities" class="custom-cat-cb"> Equities</label>
+                            <label><input type="checkbox" value="crypto" class="custom-cat-cb"> Crypto</label>
+                            <label><input type="checkbox" value="centralBanks" class="custom-cat-cb"> Central Banks</label>
+                        </div>
+                    </div>
+                    <div class="setting-group" style="margin-top: 20px;">
+                        <label class="header-label">Specific Keywords (Comma Separated)</label>
+                        <input type="text" id="customKeywords" placeholder="e.g. inflation, tariffs, yield">
+                    </div>
+                    <div class="setting-group" style="margin-top: 20px;">
+                        <label class="header-label">Squawk Strictness</label>
+                        <select id="squawkStrictness">
+                            <option value="loose">Loose (Read ALL headlines containing selections)</option>
+                            <option value="strict">Strict (Requires action verbs / shock words)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-save" onclick="saveAudioSettings()">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FEED UI CONTROLS -->
+    <div class="terminal-header">
+      <div class="header-title">Analyst Wire Headlines</div>
+      <div class="header-icons">
+        <button class="icon-btn" id="btn-filter" onclick="togglePanel('panel-filter')" title="Filters">
+          <svg viewBox="0 0 24 24"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
+        </button>
+        <button class="icon-btn" id="btn-search" onclick="togglePanel('panel-search')" title="Search">
+          <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        </button>
+        <button class="icon-btn" id="btn-refresh" onclick="forceRefresh()" title="Refresh Feed">
+          <svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Hidden Dropdown Panels -->
+    <div id="panel-search" class="control-panel">
+      <input type="text" id="search-box" class="search-input" placeholder="Search feed..." onkeyup="applyFilters()">
+    </div>
+    
+    <div id="panel-filter" class="control-panel">
+      <div class="filter-options">
+        <label><input type="checkbox" id="cat-all" checked onchange="toggleAllCategories()"> All</label>
+        <label><input type="checkbox" class="cat-filter" value="centralbanks" checked onchange="applyFilters()"> Central Banks</label>
+        <label><input type="checkbox" class="cat-filter" value="equities" checked onchange="applyFilters()"> Equities</label>
+        <label><input type="checkbox" class="cat-filter" value="forex" checked onchange="applyFilters()"> Forex</label>
+        <label><input type="checkbox" class="cat-filter" value="commodities" checked onchange="applyFilters()"> Commodities</label>
+        <label><input type="checkbox" class="cat-filter" value="crypto" checked onchange="applyFilters()"> Crypto</label>
+        <label><input type="checkbox" class="cat-filter" value="mergers" checked onchange="applyFilters()"> Mergers</label>
+        <label style="color: #f97316; font-weight: bold;"><input type="checkbox" id="importance-toggle" onchange="applyFilters()"> BREAKING ONLY</label>
+      </div>
+    </div>
+    
+    <!-- Feed Area -->
+    <div style="position: relative;">
+      <button id="new-alert-btn" class="new-alert-btn" onclick="scrollToTop()">↑ New Headlines</button>
+      <div id="market-feed" class="feed-container" onscroll="handleScroll()">
+        <div id="feed-content"></div>
+        <div class="load-more-row">
+          <button id="load-more-btn" class="btn-action" onclick="loadMore()" style="display: none;">Load More</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // INSERT YOUR FREE FINNHUB API KEY HERE
+    // ==========================================
+    const API_KEY = 'd9fjrs9r01qu5nhepvo0d9fjrs9r01qu5nhepvog'; 
+
+    /* =========================================================
+       AUDIO SQUAWK ENGINE LOGIC (RESTORED TIER FILTERS)
+       ========================================================= */
+    let audioEnabled = false, seconds = 0, timerInterval;
+    let audioCtx = null; 
+    let isFirstLoad = true; 
+    let userAudioConfig = { mode: 'default', categories: [], keywords: [], strictness: 'loose' };
+
+    function openAudioModal() {
+        document.getElementById('audioSettingsModal').style.display = 'flex';
+        document.getElementById('squawkMode').value = userAudioConfig.mode;
+        toggleCustomSettings();
+        document.querySelectorAll('.custom-cat-cb').forEach(cb => cb.checked = userAudioConfig.categories.includes(cb.value));
+        document.getElementById('customKeywords').value = userAudioConfig.keywords.join(', ');
+        document.getElementById('squawkStrictness').value = userAudioConfig.strictness;
+    }
+    
+    function closeAudioModal() { document.getElementById('audioSettingsModal').style.display = 'none'; }
+    
+    function toggleCustomSettings() {
+        const mode = document.getElementById('squawkMode').value;
+        document.getElementById('customSettingsBlock').style.display = (mode === 'custom') ? 'block' : 'none';
+    }
+
+    function saveAudioSettings() {
+        userAudioConfig.mode = document.getElementById('squawkMode').value;
+        if (userAudioConfig.mode === 'custom') {
+            userAudioConfig.categories = Array.from(document.querySelectorAll('.custom-cat-cb:checked')).map(cb => cb.value);
+            const rawKws = document.getElementById('customKeywords').value;
+            userAudioConfig.keywords = rawKws.split(',').map(k => k.trim().toLowerCase()).filter(k => k.length > 0);
+            userAudioConfig.strictness = document.getElementById('squawkStrictness').value;
+        }
+        closeAudioModal();
+        let msg = userAudioConfig.mode === 'all' ? 'Read All Mode active.' : (userAudioConfig.mode === 'default' ? 'Smart filter active.' : 'Custom squawk settings saved.');
+        alert(msg);
+    }
+
+    function initAudioContext() {
+        if (!audioCtx) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContext();
+        }
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function playSynthesizedPing(volumeLevel) {
+        if (!audioCtx) return;
+        const vol = parseFloat(volumeLevel);
+        if (vol <= 0) return;
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(vol * 0.3, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.5);
+
+        const viz = document.getElementById('squawkVisualizer');
+        viz.classList.add('active');
+        setTimeout(() => viz.classList.remove('active'), 500);
+    }
+
+    function startTimer() { 
+        timerInterval = setInterval(() => { 
+            seconds++; 
+            const h = Math.floor(seconds/3600), m = Math.floor((seconds%3600)/60), s = seconds%60; 
+            document.getElementById('timerText').innerText = `(${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')})`; 
+        }, 1000); 
+    }
+    
+    function squawk(text) { 
+        if (!audioEnabled || !('speechSynthesis' in window)) return; 
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text); 
+        u.volume = parseFloat(document.getElementById('volSlider').value); 
+        u.rate = 1.15;
+        
+        const viz = document.getElementById('squawkVisualizer');
+        u.onstart = () => viz.classList.add('active');
+        u.onend = () => viz.classList.remove('active');
+        u.onerror = () => viz.classList.remove('active'); 
+        
+        window.speechSynthesis.speak(u); 
+    }
+
+    function runAudioTest() {
+        if (!audioEnabled) return alert("Please connect the audio system first.");
+        squawk("Audio system test complete. The visualizer is functioning correctly.");
+    }
+    
+    document.getElementById('volSlider').addEventListener('change', function() {
+        if (audioEnabled) playSynthesizedPing(parseFloat(this.value));
+    });
+    
+    async function handleAudioToggle() {
+        const btn = document.getElementById('audioToggle');
+        const lbl = document.getElementById('audioLabel');
+        const btnEl = lbl.parentElement;
+        btn.disabled = true;
+        
+        if (audioEnabled) { 
+            lbl.innerText = "Disconnecting..."; 
+            btnEl.classList.remove('status-on'); 
+            await new Promise(r => setTimeout(r, 800)); 
+            clearInterval(timerInterval); 
+            audioEnabled = false; 
+            lbl.innerText = "Disconnected"; 
+            document.getElementById('timerText').innerText = ""; 
+        } else { 
+            lbl.innerText = "Connecting..."; 
+            initAudioContext();
+            await new Promise(r => setTimeout(r, 800)); 
+            audioEnabled = true; 
+            seconds = 0; 
+            startTimer(); 
+            lbl.innerText = "On Air"; 
+            btnEl.classList.add('status-on'); 
+        }
+        btn.disabled = false;
+    }
+
+    /* THE INTELLIGENT AUDIO FILTER ARRAYS */
+    const muteList = ['market wrap', 'recap', 'preview', 'for the week', 'expected to', 'poll:', 'technical analysis', 'update:'];
+    const tier1ExactTriggers = ['s&p global manufacturing', 'ism manufacturing', 'cpi', 'jolts', 'adp', 'crude oil inventories', 'initial jobless claims', 'nonfarm payrolls', 'unemployment rate', 'gdp', 'interest rate decision', 'emergency rate cut', 'circuit breaker', 'nfp'];
+    const tier2Assets = ['usd', 'eur', 'gbp', 'chf', 'aud', 'cad', 'nzd', 'jpy', 'gold', 'oil', 'crude', 'brent', 'wti', 'treasury', 's&p', 'nasdaq'];
+    const tier3Institutions = ['fed', 'ecb', 'boe', 'boj', 'rba', 'boc', 'snb', 'rbnz', 'sec', 'opec', 'powell', 'lagarde'];
+    const tier2Actions = ['surges', 'plummets', 'spikes', 'crashes', 'intervention', 'hike', 'cut', 'pause', 'pivot', 'breaks', 'tariff', 'sanctions', 'halts'];
+    const tier3Shocks = ['missile', 'military strike', 'war', 'attack', 'assassination', 'terror'];
+    
+    const customFilterCats = { 
+        commodities: ['oil', 'gold', 'metal', 'copper', 'gas', 'brent', 'wti', 'silver'], 
+        forex: ['usd', 'eur', 'jpy', 'gbp', 'chf', 'aud', 'cad', 'nzd', 'fx', 'currency', 'yield'], 
+        equities: ['stock', 'equity', 'sp500', 'nasdaq', 'dow', 'shares'], 
+        crypto: ['bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'coin'], 
+        centralBanks: ['fed', 'ecb', 'boj', 'boe', 'rba', 'central bank', 'interest rate', 'hike', 'cut'] 
+    };
+
+    function shouldTriggerAudio(headlineText, finnhubCategory) {
+        if (userAudioConfig.mode === 'all') return true; 
+
+        const lower = headlineText.toLowerCase();
+        if (muteList.some(muteWord => lower.includes(muteWord))) return false;
+
+        if (userAudioConfig.mode === 'default') {
+            if (tier1ExactTriggers.some(trigger => lower.includes(trigger))) return true;
+            if (tier3Shocks.some(shock => lower.includes(shock))) return true;
+            if (lower.includes('monetary policy') || lower.includes('rate-hike') || lower.includes('basis points') || lower.includes('bps')) return true;
+
+            const hasAssetOrInstitution = tier2Assets.some(asset => lower.includes(asset)) || tier3Institutions.some(inst => lower.includes(inst));
+            const hasAction = tier2Actions.some(action => lower.includes(action));
+            return (hasAssetOrInstitution && hasAction);
+        } else {
+            let matchesSelection = false;
+            
+            for (const cat of userAudioConfig.categories) {
+                if (finnhubCategory && finnhubCategory.toLowerCase() === cat.toLowerCase()) {
+                    matchesSelection = true; break;
+                }
+                if (customFilterCats[cat] && customFilterCats[cat].some(word => lower.includes(word))) { 
+                    matchesSelection = true; break; 
+                }
+            }
+            
+            if (!matchesSelection && userAudioConfig.keywords.length > 0) {
+                if (userAudioConfig.keywords.some(kw => lower.includes(kw))) matchesSelection = true;
+            }
+            if (!matchesSelection) return false;
+
+            if (userAudioConfig.strictness === 'loose') return true;
+            else {
+                const hasAction = tier2Actions.some(action => lower.includes(action));
+                const isShock = tier3Shocks.some(shock => lower.includes(shock));
+                return (hasAction || isShock);
+            }
+        }
+    }
+
+
+    /* =========================================================
+       NEWSFEED DATA & UI LOGIC
+       ========================================================= */
+    let allHeadlines = []; 
+    let visibleCount = 20; 
+    let unreadCount = 0;
+    const CACHE_KEY = 'aw_squawk_v6_cache';
+
+    const uiCategoryKeywords = {
+      centralbanks: ['fed', 'fomc', 'ecb', 'boe', 'boj', 'rba', 'rate', 'powell', 'lagarde', 'cpi', 'inflation'],
+      equities: ['stock', 'shares', 'nasdaq', 'spx', 's&p', 'dow', 'earnings', 'nyse'],
+      forex: ['usd', 'eur', 'gbp', 'jpy', 'aud', 'forex', 'currency', 'dollar'],
+      commodities: ['gold', 'silver', 'oil', 'wti', 'brent', 'crude', 'opec', 'copper'],
+      crypto: ['bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'sec', 'binance'],
+      mergers: ['merger', 'acquisition', 'buyout', 'takeover']
+    };
+    
+    function togglePanel(panelId) {
+      const panel = document.getElementById(panelId);
+      const btnId = panelId === 'panel-search' ? 'btn-search' : 'btn-filter';
+      const btn = document.getElementById(btnId);
+      if (panel.classList.contains('open')) {
+        panel.classList.remove('open');
+        btn.classList.remove('active');
+      } else {
+        document.querySelectorAll('.control-panel').forEach(p => p.classList.remove('open'));
+        document.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('active'));
+        panel.classList.add('open');
+        btn.classList.add('active');
+        if(panelId === 'panel-search') document.getElementById('search-box').focus();
+      }
+    }
+    function toggleAllCategories() {
+      const isChecked = document.getElementById('cat-all').checked;
+      document.querySelectorAll('.cat-filter').forEach(cb => cb.checked = isChecked);
+      applyFilters();
+    }
+
+    function checkUIImportance(title, passedAudioFilter) {
+      const lower = title.toLowerCase();
+      const uiKeywords = ['breaking', 'urgent', 'alert', 'unexpected', 'surge', 'plunge', 'halts', 'fired'];
+      const meetsUiCriteria = (title === title.toUpperCase() && title.length > 15) || uiKeywords.some(kw => lower.includes(kw));
+      return meetsUiCriteria || passedAudioFilter;
+    }
+    
+    function getMatchedCategories(title, finnhubCategory) {
+      const lower = title.toLowerCase();
+      let matched = new Set();
+      if (finnhubCategory && finnhubCategory !== 'general') matched.add(finnhubCategory.toLowerCase());
+      for (const [category, keywords] of Object.entries(uiCategoryKeywords)) {
+        if (keywords.some(kw => lower.includes(kw))) matched.add(category);
+      }
+      if (matched.size === 0) matched.add('general');
+      return Array.from(matched);
+    }
+
+    function loadCache() { try { const cached = localStorage.getItem(CACHE_KEY); if (cached) { allHeadlines = JSON.parse(cached); renderFeed(); } } catch (e) {} }
+    function saveCache() { try { localStorage.setItem(CACHE_KEY, JSON.stringify(allHeadlines.slice(0, 100))); } catch (e) {} }
+
+    function renderFeed() {
+      const container = document.getElementById('feed-content');
+      container.innerHTML = '';
+      
+      const importantOnly = document.getElementById('importance-toggle').checked;
+      const searchQuery = document.getElementById('search-box').value.toLowerCase();
+      const activeCategories = Array.from(document.querySelectorAll('.cat-filter:checked')).map(cb => cb.value);
+
+      const filteredHeadlines = allHeadlines.filter(item => {
+        const title = item.headline.toLowerCase();
+        const matchesSearch = title.includes(searchQuery);
+        const matchesImportance = !importantOnly || item.isImportant;
+        const matchesCategory = item.tags.includes('general') || item.tags.some(tag => activeCategories.includes(tag));
+        return matchesSearch && matchesImportance && matchesCategory;
+      });
+
+      document.getElementById('load-more-btn').style.display = filteredHeadlines.length > visibleCount ? 'inline-block' : 'none';
+
+      filteredHeadlines.slice(0, visibleCount).forEach((item, index) => {
+        const pubDate = new Date(item.datetime * 1000);
+        
+        // Explicit Timezone Resolution to lock formatting to local device clock
+        const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        
+        const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: userTimeZone };
+        const dateOptions = { month: 'short', day: 'numeric', timeZone: userTimeZone };
+        const tzOptions = { timeZoneName: 'short', timeZone: userTimeZone };
+        
+        const timeStr = pubDate.toLocaleTimeString(undefined, timeOptions);
+        const dateStr = pubDate.toLocaleDateString(undefined, dateOptions);
+        
+        // Extract localized timezone acronym (e.g. WITA, GMT+8)
+        const fullTzString = pubDate.toLocaleTimeString(undefined, tzOptions);
+        const tzParts = fullTzString.split(' ');
+        const tzStr = tzParts[tzParts.length - 1] || '';
+
+        let tagsHtml = '';
+        if (item.isImportant) {
+            tagsHtml += `<span class="tag tag-important">BREAKING</span>`;
+        }
+        item.tags.forEach(cat => { tagsHtml += `<span class="tag">${cat}</span>`; });
+
+        const el = document.createElement('div');
+        const isAbsoluteLatest = allHeadlines.length > 0 && item.id === allHeadlines[0].id;
+        
+        el.className = `news-row ${item.isImportant ? 'important' : ''} ${isAbsoluteLatest ? 'latest' : ''}`;
+        el.onclick = function() { this.classList.toggle('expanded'); };
+
+        el.innerHTML = `
+          <div class="time-col">
+            <div class="time-main">${timeStr}</div>
+            <div class="date-sub">${dateStr}</div>
+            <div class="tz-label">${tzStr}</div>
+          </div>
+          <div class="content-col">
+            <div class="headline-text">${item.headline}</div>
+            <div class="tags-row">${tagsHtml}</div>
+            <div class="summary-box" onclick="event.stopPropagation();">
+              ${item.summary || 'No additional summary provided.'}
+              ${item.url ? `<br><a href="${item.url}" target="_blank" class="source-link">View Source &rarr;</a>` : ''}
+            </div>
+          </div>
+        `;
+        container.appendChild(el);
+      });
+    }
+
+    function applyFilters() { visibleCount = 20; renderFeed(); }
+    function loadMore() { visibleCount += 20; renderFeed(); }
+    function forceRefresh() {
+        const btn = document.getElementById('btn-refresh');
+        btn.style.opacity = '0.5';
+        fetchMarketNews().then(() => { setTimeout(() => btn.style.opacity = '1', 300); });
+    }
+
+    async function fetchMarketNews() {
+      if (API_KEY === 'YOUR_FINNHUB_KEY') return;
+      try {
+        // Fetch all 4 free Finnhub news categories concurrently to maximize data coverage
+        const categories = ['general', 'forex', 'crypto', 'merger'];
+        const fetchPromises = categories.map(cat => 
+            fetch(`https://finnhub.io/api/v1/news?category=${cat}&token=${API_KEY}&_t=${Date.now()}`, { cache: 'no-store' })
+            .then(res => res.ok ? res.json() : [])
+            .catch(() => [])
+        );
+        
+        const results = await Promise.all(fetchPromises);
+        const rawItems = results.flat();
+        
+        // Deduplicate cross-category items by Finnhub ID
+        const fetchedItems = [];
+        const seenIds = new Set();
+        rawItems.forEach(item => {
+            if (!seenIds.has(item.id)) {
+                seenIds.add(item.id);
+                fetchedItems.push(item);
+            }
+        });
+        
+        let newItemsAdded = false;
+        let latestAudioItem = null;
+        
+        const currentUnixTime = Math.floor(Date.now() / 1000);
+
+        fetchedItems.forEach(item => {
+          // Discard upstream time-travel glitches (rejecting timestamps more than 1 hour in the future)
+          if (item.datetime > currentUnixTime + 3600) return;
+
+          if (!allHeadlines.some(existing => existing.id === item.id)) {
+            
+            const passesAudioFilter = shouldTriggerAudio(item.headline, item.category);
+            
+            item.isImportant = checkUIImportance(item.headline, passesAudioFilter);
+            item.tags = getMatchedCategories(item.headline, item.category);
+            
+            allHeadlines.push(item);
+            newItemsAdded = true;
+            
+            if (audioEnabled && !isFirstLoad) {
+                if (passesAudioFilter) {
+                    latestAudioItem = { text: item.headline, shouldSpeak: true };
+                } 
+                else if (!latestAudioItem) {
+                    latestAudioItem = { text: item.headline, shouldSpeak: false };
+                }
+            }
+          }
+        });
+
+        if (newItemsAdded) {
+          allHeadlines.sort((a, b) => b.datetime - a.datetime);
+          saveCache();
+          renderFeed();
+          
+          if (audioEnabled && !isFirstLoad && latestAudioItem) {
+              if (latestAudioItem.shouldSpeak) {
+                  squawk(latestAudioItem.text);
+              } else {
+                  const vol = parseFloat(document.getElementById('volSlider').value);
+                  playSynthesizedPing(vol);
+              }
+          }
+          
+          if (!isFirstLoad && document.getElementById('market-feed').scrollTop > 100) {
+            unreadCount++;
+            const alertBtn = document.getElementById('new-alert-btn');
+            alertBtn.innerText = `↑ ${unreadCount} New Headline${unreadCount > 1 ? 's' : ''}`;
+            alertBtn.style.display = 'block';
+          }
+        }
+        
+        isFirstLoad = false; 
+      } catch (error) { console.error("Fetch error:", error); }
+    }
+
+    function handleScroll() {
+      if (document.getElementById('market-feed').scrollTop < 50) {
+        document.getElementById('new-alert-btn').style.display = 'none';
+        unreadCount = 0;
+      }
+    }
+    function scrollToTop() {
+      document.getElementById('market-feed').scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    loadCache();
+    fetchMarketNews();
+    setInterval(fetchMarketNews, 20000);
+  </script>
+
 </body>
- 
 </html>
