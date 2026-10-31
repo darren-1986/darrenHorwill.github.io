@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Real-Time Terminal & Squawk</title>
+  <title>Real-Time Terminal & Squawk Dashboard</title>
   
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
@@ -158,7 +159,7 @@
 
     /* --- FEED LAYOUT --- */
     .feed-container { max-height: 600px; overflow-y: auto; position: relative; scroll-behavior: smooth; }
-    .news-row { display: flex; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.03); cursor: pointer; transition: background 0.15s; }
+    .news-row { display: flex; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.03); cursor: pointer; transition: background 0.15s; position: relative; }
     .news-row:hover { background: #1a1e2b; }
     
     /* Latest Headline Highlight */
@@ -186,6 +187,19 @@
     .time-col .date-sub { font-size: 0.7em; text-transform: uppercase; }
     .time-col .tz-label { font-size: 0.7em; color: #64748b; font-weight: 500; }
     .news-row.important .time-col, .news-row.important .time-col > div { color: #000000; font-weight: 700; }
+
+    /* Favorite Interaction Icon */
+    .fav-col {
+        width: 35px; flex-shrink: 0; display: flex; align-items: flex-start; justify-content: center; padding-top: 2px;
+    }
+    .fav-btn {
+        background: none; border: none; font-size: 18px; cursor: pointer; color: #475569; transition: color 0.15s, transform 0.1s; padding: 0; outline: none;
+    }
+    .fav-btn:hover { transform: scale(1.15); color: #94a3b8; }
+    .fav-btn.is-favorite { color: #eab308 !important; }
+    .news-row.important .fav-btn { color: rgba(0,0,0,0.3); }
+    .news-row.important .fav-btn:hover { color: #000; }
+    .news-row.important .fav-btn.is-favorite { color: #b45309 !important; }
 
     .content-col { flex-grow: 1; display: flex; flex-direction: column; gap: 6px; }
     .headline-text { font-size: 0.9em; line-height: 1.4; font-weight: 500; color: #f1f5f9; }
@@ -248,7 +262,9 @@
         /* Adjust feed column sizes for mobile screens */
         .time-col { width: 75px; }
         .time-col .time-main { font-size: 0.8em; }
-        .news-row { padding: 10px; gap: 8px; }
+        .fav-col { width: 28px; }
+        .fav-btn { font-size: 15px; }
+        .news-row { padding: 10px; gap: 6px; }
         .terminal-header { padding: 10px; }
         .header-title { font-size: 0.75em; }
         .filter-options { gap: 8px; }
@@ -263,7 +279,7 @@
     <!-- AUDIO DASHBOARD -->
     <div class="audio-dashboard">
         <div class="audio-left">
-            <img src="media/squawkimage.png" alt="Squawk" class="squawk-logo" onerror="this.style.display='none'">
+            <img src="media/squawkimage.png" alt="Squawk logo" class="squawk-logo" onerror="this.style.display='none'">
             <div class="audio-status-col">
                 <button id="audioToggle" onclick="handleAudioToggle()">
                     <div class="status-dot" id="statusDot"></div>
@@ -374,6 +390,7 @@
         <label><input type="checkbox" class="cat-filter" value="crypto" checked onchange="applyFilters()"> Crypto</label>
         <label><input type="checkbox" class="cat-filter" value="mergers" checked onchange="applyFilters()"> Mergers</label>
         <label style="color: #f97316; font-weight: bold;"><input type="checkbox" id="importance-toggle" onchange="applyFilters()"> BREAKING ONLY</label>
+        <label style="color: #eab308; font-weight: bold;"><input type="checkbox" id="favorites-toggle" onchange="applyFilters()"> ⭐ FAVORITES</label>
       </div>
     </div>
     
@@ -393,10 +410,10 @@
     // ==========================================
     // INSERT YOUR FREE FINNHUB API KEY HERE
     // ==========================================
-    const API_KEY = 'd9fjrs9r01qu5nhepvo0d9fjrs9r01qu5nhepvog'; 
+    const API_KEY = 'YOUR_FINNHUB_KEY'; 
 
     /* =========================================================
-       AUDIO SQUAWK ENGINE LOGIC 
+       AUDIO SQUAWK & NEW HEADLINE PING ENGINE
        ========================================================= */
     let audioEnabled = false, seconds = 0, timerInterval;
     let audioCtx = null; 
@@ -458,6 +475,33 @@
         const viz = document.getElementById('squawkVisualizer');
         viz.classList.add('active');
         setTimeout(() => viz.classList.remove('active'), 500);
+    }
+
+    // High-pitched notification alert for when ANY new headline loads
+    function triggerNewsPing() {
+        if (!audioCtx || !audioEnabled) return;
+        
+        // Cancel ping if the user is in "Read ALL" TTS mode to bypass voice overlapping
+        if (userAudioConfig.mode === 'all') return;
+
+        const vol = parseFloat(document.getElementById('volSlider').value);
+        if (vol <= 0) return;
+
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        
+        oscillator.type = 'sine';
+        // Precise double-tone high pitch ping
+        oscillator.frequency.setValueAtTime(1600, audioCtx.currentTime);
+        oscillator.frequency.setValueAtTime(2200, audioCtx.currentTime + 0.08);
+        
+        gainNode.gain.setValueAtTime(vol * 0.15, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.25);
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.25);
     }
 
     function startTimer() { 
@@ -577,12 +621,14 @@
 
 
     /* =========================================================
-       NEWSFEED DATA & UI LOGIC
+       NEWSFEED DATA & FAVORITES & UI LOGIC
        ========================================================= */
     let allHeadlines = []; 
+    let favoritesList = []; // Array of saved item ID strings 
     let visibleCount = 20; 
     let unreadCount = 0;
-    const CACHE_KEY = 'aw_squawk_v6_cache';
+    const CACHE_KEY = 'sq_newsfeed_cache_v2';
+    const FAV_KEY = 'sq_favorites_v1';
 
     const uiCategoryKeywords = {
       centralbanks: ['fed', 'fomc', 'ecb', 'boe', 'boj', 'rba', 'rate', 'powell', 'lagarde', 'cpi', 'inflation'],
@@ -632,22 +678,61 @@
       return Array.from(matched);
     }
 
-    function loadCache() { try { const cached = localStorage.getItem(CACHE_KEY); if (cached) { allHeadlines = JSON.parse(cached); renderFeed(); } } catch (e) {} }
-    function saveCache() { try { localStorage.setItem(CACHE_KEY, JSON.stringify(allHeadlines.slice(0, 100))); } catch (e) {} }
+    function loadCache() { 
+        try { 
+            const cached = localStorage.getItem(CACHE_KEY); 
+            if (cached) { allHeadlines = JSON.parse(cached); } 
+            
+            const savedFavs = localStorage.getItem(FAV_KEY);
+            if (savedFavs) { favoritesList = JSON.parse(savedFavs); }
+            
+            renderFeed();
+        } catch (e) { console.error("Cache read failed", e); } 
+    }
+    
+    function saveCache() { 
+        try { 
+            localStorage.setItem(CACHE_KEY, JSON.stringify(allHeadlines.slice(0, 100))); 
+        } catch (e) {} 
+    }
+
+    function toggleFavorite(itemId, event) {
+        if (event) event.stopPropagation(); // Avoid expanding row when toggling favourite
+        
+        const stringId = String(itemId);
+        const index = favoritesList.indexOf(stringId);
+        
+        if (index > -1) {
+            favoritesList.splice(index, 1);
+        } else {
+            favoritesList.push(stringId);
+        }
+        
+        try {
+            localStorage.setItem(FAV_KEY, JSON.stringify(favoritesList));
+        } catch (e) { console.error("Failed to update favorites database cache", e); }
+        
+        renderFeed();
+    }
 
     function renderFeed() {
       const container = document.getElementById('feed-content');
       container.innerHTML = '';
       
       const importantOnly = document.getElementById('importance-toggle').checked;
+      const favoritesOnly = document.getElementById('favorites-toggle').checked;
       const searchQuery = document.getElementById('search-box').value.toLowerCase();
       const activeCategories = Array.from(document.querySelectorAll('.cat-filter:checked')).map(cb => cb.value);
 
       const filteredHeadlines = allHeadlines.filter(item => {
+        const matchesFav = !favoritesOnly || favoritesList.includes(String(item.id));
+        if (!matchesFav) return false;
+
         const title = item.headline.toLowerCase();
         const matchesSearch = title.includes(searchQuery);
         const matchesImportance = !importantOnly || item.isImportant;
         const matchesCategory = item.tags.includes('general') || item.tags.some(tag => activeCategories.includes(tag));
+        
         return matchesSearch && matchesImportance && matchesCategory;
       });
 
@@ -668,6 +753,8 @@
         const tzParts = fullTzString.split(' ');
         const tzStr = tzParts[tzParts.length - 1] || '';
 
+        const isFav = favoritesList.includes(String(item.id));
+
         let tagsHtml = '';
         if (item.isImportant) {
             tagsHtml += `<span class="tag tag-important">BREAKING</span>`;
@@ -681,6 +768,11 @@
         el.onclick = function() { this.classList.toggle('expanded'); };
 
         el.innerHTML = `
+          <div class="fav-col">
+            <button class="fav-btn ${isFav ? 'is-favorite' : ''}" onclick="toggleFavorite('${item.id}', event)" title="${isFav ? 'Remove from favorites' : 'Mark as Favorite'}">
+              ${isFav ? '★' : '☆'}
+            </button>
+          </div>
           <div class="time-col">
             <div class="time-main">${timeStr}</div>
             <div class="date-sub">${dateStr}</div>
@@ -762,12 +854,14 @@
           saveCache();
           renderFeed();
           
-          if (audioEnabled && !isFirstLoad && latestAudioItem) {
-              if (latestAudioItem.shouldSpeak) {
+          if (audioEnabled && !isFirstLoad) {
+              // Priority speech playback 
+              if (latestAudioItem && latestAudioItem.shouldSpeak) {
                   squawk(latestAudioItem.text);
-              } else {
-                  const vol = parseFloat(document.getElementById('volSlider').value);
-                  playSynthesizedPing(vol);
+              } 
+              // Standard ping playback if "read all squawk" TTS is not active
+              else {
+                  triggerNewsPing();
               }
           }
           
