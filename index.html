@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Real-Time Terminal & Squawk Dashboard</title>
+  <title>Real-Time Terminal, Economic Calendar & Squawk Dashboard</title>
   
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
@@ -103,6 +102,47 @@
     }
     .audio-settings-btn:hover { color: #fff; }
     .audio-settings-btn svg { width: 18px; height: 18px; }
+
+    /* =========================================================
+       ECONOMIC EVENT TICKER
+       ========================================================= */
+    .economic-tracker {
+        background: #0f111a; border-bottom: 1px solid #1e2233; padding: 12px 16px;
+        display: flex; align-items: center; gap: 20px;
+    }
+    .econ-label {
+        font-family: 'Inter', sans-serif; font-size: 10px; text-transform: uppercase;
+        color: #64748b; font-weight: 700; letter-spacing: 0.5px; flex-shrink: 0;
+    }
+    .econ-timer-wrap {
+        display: flex; align-items: baseline; gap: 6px; font-family: 'JetBrains Mono', monospace; flex-shrink: 0;
+    }
+    .econ-timer-numbers {
+        font-size: 22px; font-weight: 700; color: #f97316; text-shadow: 0 0 10px rgba(249, 115, 22, 0.4);
+    }
+    .econ-timer-tz {
+        font-size: 10px; color: #64748b; font-weight: 600;
+    }
+    .econ-body-col {
+        flex-grow: 1; display: flex; align-items: center; justify-content: space-between; gap: 15px; overflow: hidden;
+    }
+    .econ-title-area {
+        display: flex; align-items: center; gap: 10px; overflow: hidden;
+    }
+    .econ-title-text {
+        font-size: 0.9em; font-weight: 600; color: #f1f5f9; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;
+    }
+    .impact-badge {
+        font-size: 9px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.5px;
+    }
+    .impact-badge.high { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .impact-badge.medium { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .impact-badge.low { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+    
+    .econ-data-points {
+        display: flex; gap: 14px; font-size: 11px; color: #94a3b8; font-weight: 500; font-family: 'JetBrains Mono', monospace; flex-shrink: 0;
+    }
+    .econ-data-val { color: #f8fafc; font-weight: 600; }
 
     /* =========================================================
        AUDIO SETTINGS MODAL 
@@ -259,6 +299,33 @@
             margin-top: 4px;
         }
         
+        /* Stack Economic Tracker columns vertically on compact viewports */
+        .economic-tracker {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 10px;
+        }
+        .econ-timer-wrap {
+            order: 1;
+        }
+        .econ-body-col {
+            order: 2;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 6px;
+            width: 100%;
+        }
+        .econ-title-area {
+            width: 100%;
+            justify-content: space-between;
+        }
+        .econ-data-points {
+            width: 100%;
+            justify-content: space-between;
+            font-size: 10px;
+        }
+
         /* Adjust feed column sizes for mobile screens */
         .time-col { width: 75px; }
         .time-col .time-main { font-size: 0.8em; }
@@ -309,6 +376,27 @@
                     <line x1="4" y1="18" x2="20" y2="18"></line><line x1="16" y1="16" x2="16" y2="20"></line>
                 </svg>
             </button>
+        </div>
+    </div>
+
+    <!-- UPCOMING ECONOMIC EVENT TICKER -->
+    <div class="economic-tracker">
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div class="econ-label">Upcoming Event</div>
+            <div class="econ-timer-wrap">
+                <div id="econTimer" class="econ-timer-numbers">--:--:--</div>
+                <div id="econTz" class="econ-timer-tz">---</div>
+            </div>
+        </div>
+        <div class="econ-body-col">
+            <div class="econ-title-area">
+                <span id="econTitle" class="econ-title-text">Waiting for economic calendar data...</span>
+                <span id="econImpact" class="impact-badge" style="display: none;">HIGH</span>
+            </div>
+            <div class="econ-data-points">
+                <span>Forecast: <span id="econForecast" class="econ-data-val">--</span></span>
+                <span>Previous: <span id="econPrevious" class="econ-data-val">--</span></span>
+            </div>
         </div>
     </div>
 
@@ -477,11 +565,9 @@
         setTimeout(() => viz.classList.remove('active'), 500);
     }
 
-    // High-pitched notification alert for when ANY new headline loads
     function triggerNewsPing() {
         if (!audioCtx || !audioEnabled) return;
         
-        // Cancel ping if the user is in "Read ALL" TTS mode to bypass voice overlapping
         if (userAudioConfig.mode === 'all') return;
 
         const vol = parseFloat(document.getElementById('volSlider').value);
@@ -491,7 +577,6 @@
         const gainNode = audioCtx.createGain();
         
         oscillator.type = 'sine';
-        // Precise double-tone high pitch ping
         oscillator.frequency.setValueAtTime(1600, audioCtx.currentTime);
         oscillator.frequency.setValueAtTime(2200, audioCtx.currentTime + 0.08);
         
@@ -621,14 +706,108 @@
 
 
     /* =========================================================
+       ECONOMIC EVENT TICKER - STRICTLY LIVE DATA ONLY
+       ========================================================= */
+    let currentEventTargetTime = null;
+    let upcomingEconEventInterval = null;
+
+    async function fetchEconomicCalendar() {
+        const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        document.getElementById('econTz').innerText = userTimeZone.split('/').pop().replace('_', ' ');
+
+        let events = [];
+        if (API_KEY !== 'YOUR_FINNHUB_KEY') {
+            try {
+                // Fetch next 7 days to ensure we find an upcoming event if today is quiet
+                const today = new Date();
+                const startStr = today.toISOString().split('T')[0];
+                const nextWeek = new Date();
+                nextWeek.setDate(today.getDate() + 7);
+                const endStr = nextWeek.toISOString().split('T')[0];
+
+                const response = await fetch(`https://finnhub.io/api/v1/calendar/economic?from=${startStr}&to=${endStr}&token=${API_KEY}&_t=${Date.now()}`, { cache: 'no-store' });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.economicCalendar) {
+                        events = data.economicCalendar.map(evt => ({
+                            title: `[${evt.country}] ${evt.event}`,
+                            time: evt.time, 
+                            impact: evt.impact === 'high' ? 'HIGH' : (evt.impact === 'medium' ? 'MEDIUM' : 'LOW'),
+                            forecast: evt.estimate || 'No Forecast',
+                            prev: evt.prev || 'No Prev'
+                        }));
+                    }
+                }
+            } catch (err) { 
+                console.warn("Finnhub Calendar API error", err); 
+            }
+        }
+
+        const now = Date.now();
+        // Discard old events and filter exclusively for future live data points
+        const upcoming = events
+            .map(evt => ({ ...evt, timestamp: new Date(evt.time).getTime() }))
+            .filter(evt => evt.timestamp > now)
+            .sort((a, b) => a.timestamp - b.timestamp);
+
+        if (upcoming.length > 0) {
+            const nextEvent = upcoming[0];
+            currentEventTargetTime = nextEvent.timestamp;
+
+            document.getElementById('econTitle').innerText = nextEvent.title;
+            document.getElementById('econForecast').innerText = nextEvent.forecast;
+            document.getElementById('econPrevious').innerText = nextEvent.prev;
+
+            const impactBad = document.getElementById('econImpact');
+            impactBad.innerText = nextEvent.impact;
+            impactBad.className = `impact-badge ${nextEvent.impact.toLowerCase()}`;
+            impactBad.style.display = 'inline-block';
+
+            if (upcomingEconEventInterval) clearInterval(upcomingEconEventInterval);
+            upcomingEconEventInterval = setInterval(updateEconomicCountdown, 1000);
+            updateEconomicCountdown();
+        } else {
+            // Clean empty state if API returns nothing (No hallucinatory fallbacks)
+            document.getElementById('econTitle').innerText = "No upcoming macro events found.";
+            document.getElementById('econTimer').innerText = "--:--:--";
+            document.getElementById('econImpact').style.display = 'none';
+            document.getElementById('econForecast').innerText = "--";
+            document.getElementById('econPrevious').innerText = "--";
+            if (upcomingEconEventInterval) clearInterval(upcomingEconEventInterval);
+        }
+    }
+
+    function updateEconomicCountdown() {
+        if (!currentEventTargetTime) return;
+        const diff = currentEventTargetTime - Date.now();
+
+        if (diff <= 0) {
+            document.getElementById('econTimer').innerText = "00:00:00";
+            document.getElementById('econTimer').style.color = "#10b981"; // Event Triggered
+            clearInterval(upcomingEconEventInterval);
+            setTimeout(fetchEconomicCalendar, 5000); // Trigger reload
+            return;
+        }
+
+        const h = Math.floor(diff / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        const s = Math.floor((diff % 60000) / 1000);
+
+        document.getElementById('econTimer').style.color = diff < 600000 ? "#ef4444" : "#f97316"; // Red when sub 10m
+        document.getElementById('econTimer').innerText = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+
+
+    /* =========================================================
        NEWSFEED DATA & FAVORITES & UI LOGIC
        ========================================================= */
     let allHeadlines = []; 
-    let favoritesList = []; // Array of saved item ID strings 
+    let favoritesList = []; 
     let visibleCount = 20; 
     let unreadCount = 0;
-    const CACHE_KEY = 'sq_newsfeed_cache_v2';
-    const FAV_KEY = 'sq_favorites_v1';
+    const CACHE_KEY = 'sq_newsfeed_cache_v4';
+    const FAV_KEY = 'sq_favorites_v3';
 
     const uiCategoryKeywords = {
       centralbanks: ['fed', 'fomc', 'ecb', 'boe', 'boj', 'rba', 'rate', 'powell', 'lagarde', 'cpi', 'inflation'],
@@ -697,7 +876,7 @@
     }
 
     function toggleFavorite(itemId, event) {
-        if (event) event.stopPropagation(); // Avoid expanding row when toggling favourite
+        if (event) event.stopPropagation(); 
         
         const stringId = String(itemId);
         const index = favoritesList.indexOf(stringId);
@@ -855,11 +1034,9 @@
           renderFeed();
           
           if (audioEnabled && !isFirstLoad) {
-              // Priority speech playback 
               if (latestAudioItem && latestAudioItem.shouldSpeak) {
                   squawk(latestAudioItem.text);
               } 
-              // Standard ping playback if "read all squawk" TTS is not active
               else {
                   triggerNewsPing();
               }
@@ -889,7 +1066,9 @@
 
     loadCache();
     fetchMarketNews();
+    fetchEconomicCalendar(); // Boot calibration
     setInterval(fetchMarketNews, 20000);
+    setInterval(fetchEconomicCalendar, 300000); // 5-minute refresh cycle
   </script>
 
 </body>
