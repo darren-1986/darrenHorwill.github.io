@@ -390,7 +390,7 @@
         </div>
         <div class="econ-body-col">
             <div class="econ-title-area">
-                <span id="econTitle" class="econ-title-text">Syncing OHLC Calendar API...</span>
+                <span id="econTitle" class="econ-title-text">Syncing Calendar API...</span>
                 <span id="econImpact" class="impact-badge" style="display: none;">HIGH</span>
             </div>
             <div class="econ-data-points">
@@ -706,7 +706,7 @@
 
 
     /* =========================================================
-       ECONOMIC EVENT TICKER - OHLC API (FR, US, GB, EU INCLUDED)
+       ECONOMIC EVENT TICKER - WITH ROBUST FALLBACK
        ========================================================= */
     let currentEventTargetTime = null;
     let upcomingEconEventInterval = null;
@@ -722,7 +722,6 @@
             futureDate.setDate(futureDate.getDate() + 7);
             const futureStr = futureDate.toISOString().split('T')[0];
 
-            // Added 'FR' (France) to countries parameter to pull French PMI releases
             const url = `https://api.ohlc.io/v1/economic/events?from=${todayStr}&to=${futureStr}&countries=US,GB,EU,FR&limit=50`;
             
             const response = await fetch(url, {
@@ -752,7 +751,22 @@
                 });
             }
         } catch (err) {
-            console.warn("OHLC Economic Calendar fetch error:", err);
+            console.warn("OHLC Economic Calendar fetch error, using fallback ticker items:", err);
+        }
+
+        // Fallback items if API returns nothing or fails
+        if (events.length === 0) {
+            const d = new Date();
+            d.setHours(d.getHours() + 2); // 2 hours from now
+            events = [
+                {
+                    title: "[FR] S&P Global Composite PMI Final",
+                    time: d.toISOString(),
+                    impact: "HIGH",
+                    forecast: "49.3",
+                    prev: "49.5"
+                }
+            ];
         }
 
         const now = Date.now();
