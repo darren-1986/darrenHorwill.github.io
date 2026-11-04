@@ -706,7 +706,7 @@
 
 
     /* =========================================================
-       ECONOMIC EVENT TICKER - OHLC API (BEARER TOKEN)
+       ECONOMIC EVENT TICKER - OHLC API (FR, US, GB, EU INCLUDED)
        ========================================================= */
     let currentEventTargetTime = null;
     let upcomingEconEventInterval = null;
@@ -722,8 +722,8 @@
             futureDate.setDate(futureDate.getDate() + 7);
             const futureStr = futureDate.toISOString().split('T')[0];
 
-            // Official OHLC Economic Events API endpoint
-            const url = `https://api.ohlc.io/v1/economic/events?from=${todayStr}&to=${futureStr}&countries=US,GB,EU&limit=20`;
+            // Added 'FR' (France) to countries parameter to pull French PMI releases
+            const url = `https://api.ohlc.io/v1/economic/events?from=${todayStr}&to=${futureStr}&countries=US,GB,EU,FR&limit=50`;
             
             const response = await fetch(url, {
                 headers: {
@@ -734,13 +734,18 @@
 
             if (response.ok) {
                 const data = await response.json();
-                const rawList = Array.isArray(data) ? data : (data.events || data.data || []);
+                const rawList = Array.isArray(data) ? data : (data.events || data.data || data.results || []);
 
                 events = rawList.map(evt => {
+                    let timestampVal = evt.scheduled_at || evt.date || evt.time || evt.timestamp;
+                    if (typeof timestampVal === 'string' && !timestampVal.includes('T') && !timestampVal.includes(':')) {
+                        timestampVal = Number(timestampVal) * 1000;
+                    }
+                    
                     return {
-                        title: `[${evt.country || 'US'}] ${evt.name || evt.title || 'Economic Release'}`,
-                        time: evt.scheduled_at || evt.date || evt.time,
-                        impact: 'HIGH',
+                        title: `[${(evt.country || evt.locale || 'US').toUpperCase()}] ${evt.name || evt.title || evt.event || 'Economic Release'}`,
+                        time: timestampVal,
+                        impact: (evt.impact || evt.importance || '').toUpperCase() === 'LOW' ? 'LOW' : 'HIGH',
                         forecast: evt.forecast !== undefined && evt.forecast !== null ? evt.forecast : '--',
                         prev: evt.previous !== undefined && evt.previous !== null ? evt.previous : '--'
                     };
@@ -766,7 +771,7 @@
 
             const impactBad = document.getElementById('econImpact');
             impactBad.innerText = nextEvent.impact;
-            impactBad.className = `impact-badge high`;
+            impactBad.className = `impact-badge ${nextEvent.impact === 'HIGH' ? 'high' : 'medium'}`;
             impactBad.style.display = 'inline-block';
 
             if (upcomingEconEventInterval) clearInterval(upcomingEconEventInterval);
