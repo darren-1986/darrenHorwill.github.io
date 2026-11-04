@@ -706,7 +706,7 @@
 
 
     /* =========================================================
-       ECONOMIC EVENT TICKER - FOREX FACTORY JSON VIA CORS TUNNEL
+       ECONOMIC EVENT TICKER - NATIVE TRADINGVIEW & STEALTH PROXY FALLBACK
        ========================================================= */
     let currentEventTargetTime = null;
     let upcomingEconEventInterval = null;
@@ -716,44 +716,70 @@
         document.getElementById('econTz').innerText = userTimeZone.split('/').pop().replace('_', ' ');
 
         let events = [];
-        try {
-            // TUNNEL: Uses allorigins.win to bypass strict CORS policies on GitHub Pages/Mobile
-            const targetUrl = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
-            
-            let response = await fetch(proxyUrl, { cache: 'no-store' });
-            
-            // If proxy fails, try direct hit as a backup
-            if (!response.ok) {
-                response = await fetch(targetUrl, { cache: 'no-store' });
-            }
+        const now = Date.now();
 
+        // METHOD 1: Try Native TradingView Free Open API (Zero Keys, Native CORS for widgets)
+        try {
+            const today = new Date();
+            const nextWeek = new Date();
+            nextWeek.setDate(today.getDate() + 7);
+            
+            const startStr = encodeURIComponent(today.toISOString());
+            const endStr = encodeURIComponent(nextWeek.toISOString());
+            
+            const tvUrl = `https://economic-calendar.tradingview.com/events?from=${startStr}&to=${endStr}&countries=US,EU,GB,JP,CA,AU,CH,NZ`;
+            
+            const response = await fetch(tvUrl, { cache: 'no-store' });
             if (response.ok) {
                 const data = await response.json();
+                const payload = data.result || data; // Adapts to TV's object wrapper if present
                 
-                events = data.map(evt => {
-                    const countryLabel = evt.country || 'Global';
-                    const titleStr = evt.title || 'Economic Event';
-                    const impactVal = (evt.impact || 'Low').toUpperCase();
-                    
-                    return {
-                        title: `[${countryLabel}] ${titleStr}`,
-                        time: evt.date, // Native FF Date format
-                        impact: impactVal,
-                        forecast: evt.forecast || 'No Forecast',
-                        prev: evt.previous || 'No Prev'
-                    };
-                });
-            } else {
-                throw new Error("Proxy and direct fetch failed.");
+                if (Array.isArray(payload)) {
+                    events = payload.map(evt => {
+                        let impactVal = 'LOW';
+                        if (evt.importance === 1) impactVal = 'MEDIUM';
+                        if (evt.importance >= 2) impactVal = 'HIGH'; // TV uses 0,1,2 for importance
+                        
+                        return {
+                            title: `[${evt.country || 'Global'}] ${evt.title || evt.event || 'Macro Event'}`,
+                            time: evt.date || evt.time,
+                            impact: impactVal,
+                            forecast: evt.forecast || '--',
+                            prev: evt.previous || '--'
+                        };
+                    });
+                }
             }
         } catch (err) { 
-            console.warn("Calendar fetch blocked by CORS/Adblocker:", err); 
+            console.warn("Native TV API fetch blocked or failed, triggering stealth fallback."); 
         }
 
-        const now = Date.now();
-        
-        // Extract upcoming future data points 
+        // METHOD 2: Stealth Redundancy (Forex Factory via corsproxy.io)
+        // Only fires if TradingView completely failed to load data
+        if (events.length === 0) {
+            try {
+                const ffUrl = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(ffUrl)}`;
+                
+                const response = await fetch(proxyUrl, { cache: 'no-store' });
+                if (response.ok) {
+                    const data = await response.json();
+                    events = data.map(evt => {
+                        return {
+                            title: `[${evt.country || 'Global'}] ${evt.title || 'Economic Event'}`,
+                            time: evt.date, 
+                            impact: (evt.impact || 'LOW').toUpperCase(),
+                            forecast: evt.forecast || '--',
+                            prev: evt.previous || '--'
+                        };
+                    });
+                }
+            } catch (err) { 
+                console.warn("Stealth proxy fallback also blocked."); 
+            }
+        }
+
+        // Extract strictly upcoming future data points
         const upcoming = events
             .map(evt => ({ ...evt, timestamp: new Date(evt.time).getTime() }))
             .filter(evt => evt.timestamp > now && !isNaN(evt.timestamp))
@@ -781,8 +807,8 @@
             upcomingEconEventInterval = setInterval(updateEconomicCountdown, 1000);
             updateEconomicCountdown();
         } else {
-            // Clean empty state if completely blocked or no events left this week
-            document.getElementById('econTitle').innerText = "No upcoming macro events found (or feed blocked).";
+            // Clean empty state if all feeds are absolutely blocked by user's browser
+            document.getElementById('econTitle').innerText = "No upcoming events found (or blocked).";
             document.getElementById('econTimer').innerText = "--:--:--";
             document.getElementById('econImpact').style.display = 'none';
             document.getElementById('econForecast').innerText = "--";
