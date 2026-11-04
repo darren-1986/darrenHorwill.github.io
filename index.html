@@ -277,7 +277,6 @@
     @media (max-width: 640px) {
         body { padding: 5px; }
         
-        /* Stack the audio dashboard elements to prevent horizontal overflow */
         .audio-dashboard {
             flex-wrap: wrap;
             gap: 12px;
@@ -291,7 +290,6 @@
             flex: 1;
             justify-content: flex-end;
         }
-        /* Drop visualizer to a full-width second row on mobile */
         .squawk-visualizer {
             order: 3;
             flex-basis: 100%;
@@ -299,7 +297,6 @@
             margin-top: 4px;
         }
         
-        /* Stack Economic Tracker columns vertically on compact viewports */
         .economic-tracker {
             flex-direction: column;
             align-items: flex-start;
@@ -326,7 +323,6 @@
             font-size: 10px;
         }
 
-        /* Adjust feed column sizes for mobile screens */
         .time-col { width: 75px; }
         .time-col .time-main { font-size: 0.8em; }
         .fav-col { width: 28px; }
@@ -430,7 +426,7 @@
                     </div>
                     <div class="setting-group" style="margin-top: 20px;">
                         <label class="header-label">Specific Keywords (Comma Separated)</label>
-                        <input type="text" id="customKeywords" placeholder="e.g. inflation, tariffs, yield">
+                        <input type="text" id="customKeywords" placeholder="Search keywords...">
                     </div>
                     <div class="setting-group" style="margin-top: 20px;">
                         <label class="header-label">Squawk Strictness</label>
@@ -495,9 +491,10 @@
   </div>
 
   <script>
-    // ==========================================
+    // AUTOMATIC LOCALSTORAGE PURGE: Clear legacy fallback keys on boot
+    localStorage.removeItem('fallback_event_time');
+
     // API KEYS CONFIGURATION
-    // ==========================================
     const FINNHUB_API_KEY = 'd9fjrs9r01qu5nhepvo0d9fjrs9r01qu5nhepvog'; 
     const OHLC_API_KEY = 'Ohlc_kNsWMkVUczwHEijSLSDmFcqHgF3MyhCX'; 
 
@@ -705,7 +702,7 @@
     }
 
     /* =========================================================
-       ECONOMIC EVENT TICKER - API ONLY (NO FALLBACK DATA)
+       ECONOMIC EVENT TICKER - REAL API ONLY
        ========================================================= */
     let currentEventTargetTime = null;
     let upcomingEconEventInterval = null;
@@ -1069,7 +1066,7 @@
 
     loadCache();
     fetchMarketNews();
-    fetchEconomicCalendar(); // Boot API calendar
+    fetchEconomicCalendar(); 
     setInterval(fetchMarketNews, 20000);
     setInterval(fetchEconomicCalendar, 300000); 
   </script>
