@@ -706,7 +706,7 @@
 
 
     /* =========================================================
-       ECONOMIC EVENT TICKER - FOREX FACTORY OFFICIAL JSON (100% FREE/CORS)
+       ECONOMIC EVENT TICKER - FOREX FACTORY JSON VIA CORS TUNNEL
        ========================================================= */
     let currentEventTargetTime = null;
     let upcomingEconEventInterval = null;
@@ -717,9 +717,17 @@
 
         let events = [];
         try {
-            // Using the official, extremely reliable Forex Factory Public JSON Feed
-            const response = await fetch(`https://nfs.faireconomy.media/ff_calendar_thisweek.json`, { cache: 'no-store' });
+            // TUNNEL: Uses allorigins.win to bypass strict CORS policies on GitHub Pages/Mobile
+            const targetUrl = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
             
+            let response = await fetch(proxyUrl, { cache: 'no-store' });
+            
+            // If proxy fails, try direct hit as a backup
+            if (!response.ok) {
+                response = await fetch(targetUrl, { cache: 'no-store' });
+            }
+
             if (response.ok) {
                 const data = await response.json();
                 
@@ -730,19 +738,22 @@
                     
                     return {
                         title: `[${countryLabel}] ${titleStr}`,
-                        time: evt.date, // Returns ISO strings natively
+                        time: evt.date, // Native FF Date format
                         impact: impactVal,
                         forecast: evt.forecast || 'No Forecast',
                         prev: evt.previous || 'No Prev'
                     };
                 });
+            } else {
+                throw new Error("Proxy and direct fetch failed.");
             }
         } catch (err) { 
-            console.warn("Forex Factory Calendar fetch error", err); 
+            console.warn("Calendar fetch blocked by CORS/Adblocker:", err); 
         }
 
         const now = Date.now();
-        // Extract strictly upcoming future data points (ignore past week events)
+        
+        // Extract upcoming future data points 
         const upcoming = events
             .map(evt => ({ ...evt, timestamp: new Date(evt.time).getTime() }))
             .filter(evt => evt.timestamp > now && !isNaN(evt.timestamp))
@@ -770,8 +781,8 @@
             upcomingEconEventInterval = setInterval(updateEconomicCountdown, 1000);
             updateEconomicCountdown();
         } else {
-            // Clean empty state if API returns nothing in the future
-            document.getElementById('econTitle').innerText = "No upcoming macro events found.";
+            // Clean empty state if completely blocked or no events left this week
+            document.getElementById('econTitle').innerText = "No upcoming macro events found (or feed blocked).";
             document.getElementById('econTimer').innerText = "--:--:--";
             document.getElementById('econImpact').style.display = 'none';
             document.getElementById('econForecast').innerText = "--";
