@@ -390,7 +390,7 @@
         </div>
         <div class="econ-body-col">
             <div class="econ-title-area">
-                <span id="econTitle" class="econ-title-text">Waiting for economic calendar data...</span>
+                <span id="econTitle" class="econ-title-text">Fetching live macro data...</span>
                 <span id="econImpact" class="impact-badge" style="display: none;">HIGH</span>
             </div>
             <div class="econ-data-points">
@@ -706,7 +706,7 @@
 
 
     /* =========================================================
-       ECONOMIC EVENT TICKER - BIQUOTE / SHOWMYTRADES API INTEGRATION
+       ECONOMIC EVENT TICKER - FOREX FACTORY OFFICIAL JSON (100% FREE/CORS)
        ========================================================= */
     let currentEventTargetTime = null;
     let upcomingEconEventInterval = null;
@@ -717,38 +717,35 @@
 
         let events = [];
         try {
-            // Re-routed to restriction-free Biquote / Aggregator API structure
-            const response = await fetch(`https://api.biquote.io/v1/economic-calendar`, { cache: 'no-store' });
+            // Using the official, extremely reliable Forex Factory Public JSON Feed
+            const response = await fetch(`https://nfs.faireconomy.media/ff_calendar_thisweek.json`, { cache: 'no-store' });
             
             if (response.ok) {
                 const data = await response.json();
                 
-                // Adaptive data parser to ingest Biquote or ShowMyTrades standard arrays
-                const payload = Array.isArray(data) ? data : (data.data || []);
-                
-                events = payload.map(evt => {
-                    const countryLabel = evt.country || evt.currency || 'Global';
-                    const titleStr = evt.event || evt.title || 'Economic Event';
-                    const impactVal = (evt.impact || evt.importance || 'LOW').toString().toUpperCase();
+                events = data.map(evt => {
+                    const countryLabel = evt.country || 'Global';
+                    const titleStr = evt.title || 'Economic Event';
+                    const impactVal = (evt.impact || 'Low').toUpperCase();
                     
                     return {
                         title: `[${countryLabel}] ${titleStr}`,
-                        time: evt.time || evt.date, 
+                        time: evt.date, // Returns ISO strings natively
                         impact: impactVal,
-                        forecast: evt.forecast || evt.estimate || 'No Forecast',
-                        prev: evt.previous || evt.prev || 'No Prev'
+                        forecast: evt.forecast || 'No Forecast',
+                        prev: evt.previous || 'No Prev'
                     };
                 });
             }
         } catch (err) { 
-            console.warn("Economic Calendar alternative API fetch error", err); 
+            console.warn("Forex Factory Calendar fetch error", err); 
         }
 
         const now = Date.now();
-        // Extract strictly upcoming future data points
+        // Extract strictly upcoming future data points (ignore past week events)
         const upcoming = events
             .map(evt => ({ ...evt, timestamp: new Date(evt.time).getTime() }))
-            .filter(evt => evt.timestamp > now)
+            .filter(evt => evt.timestamp > now && !isNaN(evt.timestamp))
             .sort((a, b) => a.timestamp - b.timestamp);
 
         if (upcoming.length > 0) {
@@ -763,8 +760,8 @@
             impactBad.innerText = nextEvent.impact;
             
             let badgeClass = 'low';
-            if (nextEvent.impact === 'HIGH' || nextEvent.impact === '3') badgeClass = 'high';
-            else if (nextEvent.impact === 'MEDIUM' || nextEvent.impact === '2') badgeClass = 'medium';
+            if (nextEvent.impact === 'HIGH') badgeClass = 'high';
+            else if (nextEvent.impact === 'MEDIUM') badgeClass = 'medium';
             
             impactBad.className = `impact-badge ${badgeClass}`;
             impactBad.style.display = 'inline-block';
@@ -773,7 +770,7 @@
             upcomingEconEventInterval = setInterval(updateEconomicCountdown, 1000);
             updateEconomicCountdown();
         } else {
-            // Clean empty state if API returns nothing
+            // Clean empty state if API returns nothing in the future
             document.getElementById('econTitle').innerText = "No upcoming macro events found.";
             document.getElementById('econTimer').innerText = "--:--:--";
             document.getElementById('econImpact').style.display = 'none';
@@ -791,7 +788,7 @@
             document.getElementById('econTimer').innerText = "00:00:00";
             document.getElementById('econTimer').style.color = "#10b981"; // Event Triggered
             clearInterval(upcomingEconEventInterval);
-            setTimeout(fetchEconomicCalendar, 5000); // Trigger reload
+            setTimeout(fetchEconomicCalendar, 5000); // Trigger reload for the next event
             return;
         }
 
