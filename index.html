@@ -390,7 +390,7 @@
         </div>
         <div class="econ-body-col">
             <div class="econ-title-area">
-                <span id="econTitle" class="econ-title-text">Syncing TradingView Calendar...</span>
+                <span id="econTitle" class="econ-title-text">Syncing OHLC Calendar API...</span>
                 <span id="econImpact" class="impact-badge" style="display: none;">HIGH</span>
             </div>
             <div class="econ-data-points">
@@ -496,9 +496,10 @@
 
   <script>
     // ==========================================
-    // FINNHUB API KEY FOR NEWSFEED
+    // API KEYS CONFIGURATION
     // ==========================================
-    const API_KEY = 'd9fjrs9r01qu5nhepvo0d9fjrs9r01qu5nhepvog'; 
+    const FINNHUB_API_KEY = 'd9fjrs9r01qu5nhepvo0d9fjrs9r01qu5nhepvog'; 
+    const OHLC_API_KEY = 'Ohlc_kNsWMkVUczwHEijSLSDmFcqHgF3MyhCX'; 
 
     /* =========================================================
        AUDIO SQUAWK & NEW HEADLINE PING ENGINE
@@ -567,7 +568,6 @@
 
     function triggerNewsPing() {
         if (!audioCtx || !audioEnabled) return;
-        
         if (userAudioConfig.mode === 'all') return;
 
         const vol = parseFloat(document.getElementById('volSlider').value);
@@ -706,7 +706,7 @@
 
 
     /* =========================================================
-       ECONOMIC EVENT TICKER - TRADINGVIEW PUBLIC CALENDAR ENDPOINT
+       ECONOMIC EVENT TICKER - OHLC API (BEARER TOKEN)
        ========================================================= */
     let currentEventTargetTime = null;
     let upcomingEconEventInterval = null;
@@ -717,75 +717,66 @@
 
         let events = [];
         try {
-            const today = new Date();
-            const nextWeek = new Date();
-            nextWeek.setDate(today.getDate() + 7);
+            const todayStr = new Date().toISOString().split('T')[0];
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + 7);
+            const futureStr = futureDate.toISOString().split('T')[0];
 
-            // Free public TradingView economic calendar endpoint
-            const tvUrl = `https://economic-calendar.tradingview.com/events?from=${encodeURIComponent(today.toISOString())}&to=${encodeURIComponent(nextWeek.toISOString())}&countries=US,EU,GB,JP,CA,AU`;
+            // Official OHLC Economic Events API endpoint
+            const url = `https://api.ohlc.io/v1/economic/events?from=${todayStr}&to=${futureStr}&countries=US,GB,EU&limit=20`;
             
-            const response = await fetch(tvUrl, { cache: 'no-store' });
+            const response = await fetch(url, {
+                headers: {
+                    'Authorization': `Bearer ${OHLC_API_KEY}`
+                },
+                cache: 'no-store'
+            });
+
             if (response.ok) {
                 const data = await response.json();
-                const rawList = data.result || data;
+                const rawList = Array.isArray(data) ? data : (data.events || data.data || []);
 
-                if (Array.isArray(rawList)) {
-                    events = rawList.map(evt => {
-                        let impactVal = 'LOW';
-                        if (evt.importance === 1) impactVal = 'MEDIUM';
-                        if (evt.importance >= 2) impactVal = 'HIGH';
-
-                        return {
-                            title: `[${evt.country || 'Global'}] ${evt.title || evt.event || 'Macro Release'}`,
-                            time: evt.date || evt.time,
-                            impact: impactVal,
-                            forecast: evt.forecast !== undefined ? evt.forecast : '--',
-                            prev: evt.previous !== undefined ? evt.previous : '--'
-                        };
-                    });
-                }
+                events = rawList.map(evt => {
+                    return {
+                        title: `[${evt.country || 'US'}] ${evt.name || evt.title || 'Economic Release'}`,
+                        time: evt.scheduled_at || evt.date || evt.time,
+                        impact: 'HIGH',
+                        forecast: evt.forecast !== undefined && evt.forecast !== null ? evt.forecast : '--',
+                        prev: evt.previous !== undefined && evt.previous !== null ? evt.previous : '--'
+                    };
+                });
             }
         } catch (err) {
-            console.warn("TradingView calendar fetch warning:", err);
+            console.warn("OHLC Economic Calendar fetch error:", err);
         }
 
-        // Fallback robust pool if network or CORS restricts direct pull
         const now = Date.now();
-        let validEvents = events
+        const validEvents = events
             .map(evt => ({ ...evt, timestamp: new Date(evt.time).getTime() }))
             .filter(evt => evt.timestamp > now && !isNaN(evt.timestamp))
             .sort((a, b) => a.timestamp - b.timestamp);
 
-        if (validEvents.length === 0) {
-            const d = new Date();
-            const t1 = new Date(d); t1.setHours(20, 0, 0, 0);
-            if (t1.getTime() <= now) t1.setDate(t1.getDate() + 1);
+        if (validEvents.length > 0) {
+            const nextEvent = validEvents[0];
+            currentEventTargetTime = nextEvent.timestamp;
 
-            validEvents = [
-                { title: "[US] Core CPI & Inflation Data", timestamp: t1.getTime(), impact: "HIGH", forecast: "2.7%", prev: "2.6%" }
-            ];
+            document.getElementById('econTitle').innerText = nextEvent.title;
+            document.getElementById('econForecast').innerText = nextEvent.forecast;
+            document.getElementById('econPrevious').innerText = nextEvent.prev;
+
+            const impactBad = document.getElementById('econImpact');
+            impactBad.innerText = nextEvent.impact;
+            impactBad.className = `impact-badge high`;
+            impactBad.style.display = 'inline-block';
+
+            if (upcomingEconEventInterval) clearInterval(upcomingEconEventInterval);
+            upcomingEconEventInterval = setInterval(updateEconomicCountdown, 1000);
+            updateEconomicCountdown();
+        } else {
+            document.getElementById('econTitle').innerText = "No upcoming events scheduled.";
+            document.getElementById('econTimer').innerText = "--:--:--";
+            document.getElementById('econImpact').style.display = 'none';
         }
-
-        const nextEvent = validEvents[0];
-        currentEventTargetTime = nextEvent.timestamp;
-
-        document.getElementById('econTitle').innerText = nextEvent.title;
-        document.getElementById('econForecast').innerText = nextEvent.forecast || '--';
-        document.getElementById('econPrevious').innerText = nextEvent.prev || '--';
-
-        const impactBad = document.getElementById('econImpact');
-        impactBad.innerText = nextEvent.impact;
-        
-        let badgeClass = 'low';
-        if (nextEvent.impact === 'HIGH') badgeClass = 'high';
-        else if (nextEvent.impact === 'MEDIUM') badgeClass = 'medium';
-        
-        impactBad.className = `impact-badge ${badgeClass}`;
-        impactBad.style.display = 'inline-block';
-
-        if (upcomingEconEventInterval) clearInterval(upcomingEconEventInterval);
-        upcomingEconEventInterval = setInterval(updateEconomicCountdown, 1000);
-        updateEconomicCountdown();
     }
 
     function updateEconomicCountdown() {
@@ -992,7 +983,7 @@
       try {
         const categories = ['general', 'forex', 'crypto', 'merger'];
         const fetchPromises = categories.map(cat => 
-            fetch(`https://finnhub.io/api/v1/news?category=${cat}&token=${API_KEY}&_t=${Date.now()}`, { cache: 'no-store' })
+            fetch(`https://finnhub.io/api/v1/news?category=${cat}&token=${FINNHUB_API_KEY}&_t=${Date.now()}`, { cache: 'no-store' })
             .then(res => res.ok ? res.json() : [])
             .catch(() => [])
         );
@@ -1075,7 +1066,7 @@
 
     loadCache();
     fetchMarketNews();
-    fetchEconomicCalendar(); // Boot calibration
+    fetchEconomicCalendar(); // Boot API calendar
     setInterval(fetchMarketNews, 20000);
     setInterval(fetchEconomicCalendar, 300000); 
   </script>
