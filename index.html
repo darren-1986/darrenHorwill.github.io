@@ -704,9 +704,8 @@
         }
     }
 
-
     /* =========================================================
-       ECONOMIC EVENT TICKER - WITH ROBUST FALLBACK
+       ECONOMIC EVENT TICKER - API ONLY (NO FALLBACK DATA)
        ========================================================= */
     let currentEventTargetTime = null;
     let upcomingEconEventInterval = null;
@@ -751,34 +750,7 @@
                 });
             }
         } catch (err) {
-            console.warn("OHLC Economic Calendar fetch error, using fallback ticker items:", err);
-        }
-
-        // --- THE FIX: Persistent Fallback Target Time ---
-        if (events.length === 0) {
-            let savedTarget = localStorage.getItem('fallback_event_time');
-            let targetTime;
-            
-            // If a saved target time exists and is in the future, use it.
-            if (savedTarget && Number(savedTarget) > Date.now()) {
-                targetTime = Number(savedTarget);
-            } else {
-                // Otherwise, set a new target time and save it to localStorage so it survives refreshes.
-                const d = new Date();
-                d.setHours(d.getHours() + 2);
-                targetTime = d.getTime();
-                localStorage.setItem('fallback_event_time', targetTime);
-            }
-
-            events = [
-                {
-                    title: "[FR] S&P Global Composite PMI Final",
-                    time: targetTime,
-                    impact: "HIGH",
-                    forecast: "49.3",
-                    prev: "49.5"
-                }
-            ];
+            console.warn("OHLC Economic Calendar fetch error:", err);
         }
 
         const now = Date.now();
